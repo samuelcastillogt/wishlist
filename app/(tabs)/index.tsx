@@ -1,96 +1,59 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableHighlight, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
+import IconCategoryButon from '@/components/new/IconCategoryButon';
+import ProductCard from '@/components/new/ProductCard';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { apiDistelsa } from '@/services/apiDistelsa.service';
+import { useEffect, useState } from 'react';
 
 export default function HomeScreen() {
+  const [data, setData] = useState([])
+  const [products, setProducts] = useState([])
+  const getData = async()=>{
+    const data = await apiDistelsa.getData("catalogs/categories/summary?categoryDepth=5&categoryType=Base%2CPromoci%C3%B3n")
+    setData(data.children)
+  }
+  const getProducts = async()=>{
+    const data = await apiDistelsa.getProductsByTarget()
+    setProducts(data.products)
+  }
+
+  useEffect(()=>{
+    getData()
+    getProducts()
+  }, [])
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
       headerImage={
         <Image
-          source={require('@/assets/images/partial-react-logo.png')}
+          source={{uri: "https://www.max.com.gt/assets/home_herobanner_sm_lenovo_e6fa77508f.webp"}}
           style={styles.reactLogo}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+        <View>
+        <TextInput placeholder='Buscar...' style={{backgroundColor: "white", padding: 10, borderRadius: 10, marginHorizontal: 10, borderColor: "red", borderWidth: 1}} />
+        <TouchableHighlight onPress={() => console.log("hola")} style={{backgroundColor: "red", padding: 10, borderRadius: 10, marginHorizontal:10}}>
+          <Text style={{color: "white", fontWeight: "bold", textAlign: "center"}}>Buscar</Text>
+        </TouchableHighlight>
+        </View>
+        <ScrollView horizontal style={{gap: 10, padding: 10}}>
+        {
+          data && data.map((item:any)=> <IconCategoryButon key={item.title} item={item} />)
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
+        }
+      </ScrollView>
+      {products && products.map((item:any)=> <ProductCard key={item.description} item={item} />)}
     </ParallaxScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
   reactLogo: {
-    height: 178,
-    width: 290,
+    height: 250,
+    width: 500,
     bottom: 0,
     left: 0,
     position: 'absolute',
