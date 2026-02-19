@@ -26,6 +26,22 @@ class apiDistelsaService {
         const response = await axios.get("https://ac.cnstrc.com/autocomplete/"+ producto +"?c=ciojs-client-2.64.3&key=key_5JqvLHPZsU80qkem&i=5d42272c-5244-4ff3-aa8e-c8675c952be0&s=5&_dt=1771350866534")
         return response.data
     }
+    public async getProductBySlug(slug: string){
+        try {
+            const cleanSlug = slug.trim().replace(/^\/+|\/+$/g, "");
+            const encodedSlug = cleanSlug
+                .split("/")
+                .map((segment) => encodeURIComponent(segment))
+                .join("/");
+            const buildId = "g_2G8zC6ksiJ3q8Rff3Rz";
+            const uri = `https://www.max.com.gt/_next/data/${buildId}/es/${encodedSlug}.json`;
+            const response = await axios.get(uri);
+            return response.data;
+        } catch (error) {
+            console.log("Error fetching product details:", error);
+            throw error;
+        }
+    }
 }
 
 export const apiDistelsa = new apiDistelsaService()

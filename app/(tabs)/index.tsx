@@ -1,12 +1,12 @@
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { Image } from 'expo-image';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import IconCategoryButon from '@/components/new/IconCategoryButon';
 import ProductCard from '@/components/new/ProductCard';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { apiDistelsa } from '@/services/apiDistelsa.service';
-import { useEffect, useState } from 'react';
 //import { constants } from '@/constants/constants';
 export default function HomeScreen() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -14,6 +14,10 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
+  const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [selectedProductDetail, setSelectedProductDetail] = useState<any>(null);
+  const [cartCount, setCartCount] = useState(0);
 
   const getData = async () => {
     const data = await apiDistelsa.getData('catalogs/categories/summary?categoryDepth=5&categoryType=Base%2CPromoci%C3%B3n');
@@ -49,6 +53,18 @@ export default function HomeScreen() {
 
   const getSuggestionLabel = (item: any) => item?.value ?? '';
   const getSuggestionKey = (item: any, index: number) => item?.data?.id ?? `${item?.value ?? 'suggestion'}-${index}`;
+  const toDisplayText = (value: any, fallback = ''): string => {
+    if (typeof value === 'string' || typeof value === 'number') {
+      return String(value);
+    }
+    if (value && typeof value === 'object') {
+      const candidate = value.title ?? value.name ?? value.label ?? value.id;
+      if (typeof candidate === 'string' || typeof candidate === 'number') {
+        return String(candidate);
+      }
+    }
+    return fallback;
+  };
 
   const getRelatedImage = (item: any) =>
     item?.image_url ??
@@ -59,18 +75,22 @@ export default function HomeScreen() {
     '';
 
   const getRelatedBrand = (item: any) =>
-    item?.brand ??
-    item?.data?.brand ??
-    item?.data?.metadata?.brand ??
-    item?.data?.brand_name ??
-    'Marca';
+    toDisplayText(
+      item?.brand ??
+        item?.data?.brand ??
+        item?.data?.metadata?.brand ??
+        item?.data?.brand_name,
+      'Marca',
+    );
 
   const getRelatedTitle = (item: any) =>
-    item?.value ??
-    item?.name ??
-    item?.data?.name ??
-    item?.data?.id ??
-    'Producto';
+    toDisplayText(
+      item?.value ??
+        item?.name ??
+        item?.data?.name ??
+        item?.data?.id,
+      'Producto',
+    );
 
   const getRelatedPrice = (item: any) =>
     item?.price ??
@@ -88,6 +108,75 @@ export default function HomeScreen() {
     }
     return null;
   };
+
+  const getSlugFromItem = (item: any): string | null => {
+    const rawSlug =
+      item?.slug ??
+      item?.productSlug ??
+      item?.data?.slug ??
+      item?.data?.productSlug ??
+      item?.data?.id ??
+      null;
+
+    if (!rawSlug || typeof rawSlug !== 'string') {
+      return null;
+    }
+
+    return rawSlug.trim().replace(/^\/+|\/+$/g, '');
+  };
+
+  const openProductDetailModal = async (item: any) => {
+    const slug = getSlugFromItem(item);
+    if (!slug) {
+      Alert.alert('No disponible', 'No se encontró slug para este producto.');
+      return;
+    }
+
+    setIsDetailModalVisible(true);
+    setIsDetailLoading(true);
+    setSelectedProductDetail(null);
+
+    try {
+      const response = await apiDistelsa.getProductBySlug(slug);
+      const product = response?.pageProps?.product ?? null;
+
+      if (!product) {
+        Alert.alert('Sin detalle', 'No se pudo obtener el detalle del producto.');
+      }
+
+      setSelectedProductDetail(product);
+    } catch (_error) {
+      Alert.alert('Error', 'No se pudo consultar el detalle del producto.');
+      setIsDetailModalVisible(false);
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  const addToCartFromModal = () => {
+    if (!selectedProductDetail) {
+      return;
+    }
+
+    setCartCount((prev) => prev + 1);
+    Alert.alert('Carrito', `${selectedProductDetail?.title ?? 'Producto'} agregado al carrito.`);
+  };
+
+  const getModalImage = (product: any) =>
+    product?.mainImage?.url ??
+    product?.thumbnailImage?.url ??
+    product?.images?.[0]?.url ??
+    product?.gallery?.[0]?.url ??
+    '';
+
+  const getModalBrand = (product: any) =>
+    toDisplayText(
+      product?.brand?.name ??
+        product?.brand,
+      'Sin marca',
+    );
+
+  const modalTitle = toDisplayText(selectedProductDetail?.title, 'Producto');
 
   return (
     <ParallaxScrollView
@@ -125,7 +214,7 @@ export default function HomeScreen() {
               setRelatedProducts([]);
             }}
           >
-            <MaterialIcons name="close" size={20} color="#black" />
+            <MaterialIcons name="close" size={20} color="#000000" />
           </TouchableOpacity>
         </View>
       </View>
@@ -176,6 +265,9 @@ export default function HomeScreen() {
                         {title}
                       </Text>
                       {price ? <Text style={styles.relatedPrice}>{price}</Text> : null}
+                      <TouchableOpacity style={styles.cardDetailsButton} onPress={() => openProductDetailModal(item)}>
+                        <Text style={styles.cardDetailsButtonText}>Ver detalles</Text>
+                      </TouchableOpacity>
                     </View>
                   );
                 })}
@@ -189,7 +281,55 @@ export default function HomeScreen() {
         {categories && categories.map((item: any) => <IconCategoryButon key={item.title} item={item} />)}
       </ScrollView>
       <Text style={styles.productsTitle}>Productos que te pueden gustar</Text>
-      {products && products.map((item: any) => <ProductCard key={item.description} item={item} />)}
+      {products && products.map((item: any) => <ProductCard key={item.description} item={item} onViewDetails={openProductDetailModal} />)}
+
+      <Modal
+        visible={isDetailModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsDetailModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detalle del producto</Text>
+              <TouchableOpacity onPress={() => setIsDetailModalVisible(false)}>
+                <MaterialIcons name="close" size={22} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            {isDetailLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#E10812" />
+                <Text style={styles.loadingText}>Cargando detalle...</Text>
+              </View>
+            ) : selectedProductDetail ? (
+              <View style={styles.modalBody}>
+                {getModalImage(selectedProductDetail) ? (
+                  <Image source={{ uri: getModalImage(selectedProductDetail) }} style={styles.modalImage} contentFit="contain" />
+                ) : null}
+                <Text style={styles.modalBrand}>
+                  Marca: <Text style={styles.modalBrandValue}>{getModalBrand(selectedProductDetail)}</Text>
+                </Text>
+                <Text style={styles.modalProductName}>{modalTitle}</Text>
+                {selectedProductDetail?.prices?.salesPrice?.value != null ? (
+                  <Text style={styles.modalPrice}>{formatPrice(selectedProductDetail.prices.salesPrice.value)}</Text>
+                ) : selectedProductDetail?.prices?.regularPrice?.value != null ? (
+                  <Text style={styles.modalPrice}>{formatPrice(selectedProductDetail.prices.regularPrice.value)}</Text>
+                ) : null}
+
+                <TouchableOpacity style={styles.addToCartButton} onPress={addToCartFromModal}>
+                  <Text style={styles.addToCartButtonText}>Agregar al carrito ({cartCount})</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>No hay datos para mostrar.</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ParallaxScrollView>
   );
 }
@@ -305,6 +445,19 @@ const styles = StyleSheet.create({
     fontSize: 26,
     fontWeight: '700',
   },
+  cardDetailsButton: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    backgroundColor: '#E10812',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  cardDetailsButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
   productsTitle: {
     color: '#1f2937',
     fontSize: 28,
@@ -312,5 +465,76 @@ const styles = StyleSheet.create({
     marginHorizontal: 10,
     marginTop: 12,
     marginBottom: 6,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    maxHeight: '85%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  modalBody: {
+    gap: 8,
+  },
+  modalImage: {
+    width: '100%',
+    height: 180,
+  },
+  modalBrand: {
+    fontSize: 14,
+    color: '#374151',
+  },
+  modalBrandValue: {
+    color: '#2563EB',
+    textDecorationLine: 'underline',
+    fontWeight: '700',
+  },
+  modalProductName: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#111827',
+  },
+  modalPrice: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  addToCartButton: {
+    marginTop: 6,
+    backgroundColor: '#E10812',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  addToCartButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 22,
+    gap: 8,
+  },
+  loadingText: {
+    color: '#374151',
+    fontSize: 14,
   },
 });

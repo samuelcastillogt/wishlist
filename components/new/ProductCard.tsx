@@ -1,21 +1,29 @@
-import { Image } from 'expo-image'
-import React from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Image } from 'expo-image';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-function ProductCard(item:any) {
-//console.log(item.item.prices)
+type ProductCardProps = {
+  item: any;
+  onViewDetails?: (item: any) => void;
+};
+
+function ProductCard({ item, onViewDetails }: ProductCardProps) {
+  const imageUrl = item?.thumbnailImage?.url ?? '';
+  const title = typeof item?.title === 'string' || typeof item?.title === 'number'
+    ? String(item.title)
+    : (item?.title?.title ?? item?.title?.name ?? 'Producto');
+  const regularPrice = item?.prices?.regularPrice?.value;
+
   return (
-    <View style={styles.container}>
-        <Image source={item.item.thumbnailImage.url} style={{width: 100, height: 100}} />
-        <Text style={{fontSize: 15, color: "black", textAlign: "center"}}>{item.item.title}</Text>
+    <View style={styles.container} >
+        {imageUrl ? <Image source={imageUrl} style={{width: 100, height: 100}} /> : <View style={{width: 100, height: 100}} />}
+        <Text style={{fontSize: 15, color: "black", textAlign: "center"}}>{title}</Text>
         <View style={{flexDirection: "row", gap: 10, alignItems: "center"}}>
-        {
-            //item.item.prices.discount.percentOff !=null  && <Text style={{fontSize: 14, color: "white", backgroundColor: "red", padding: 5, fontWeight: "bold"}}>{item.item.prices.discount.percentOff}%</Text>
-        }
-        <Text style={{fontSize: 14, color: "black", fontWeight: "bold", textDecorationLine: "line-through"}}>Q.{item.item.prices.regularPrice.value}.00</Text>
+        {regularPrice != null && <Text style={{fontSize: 14, color: "black", fontWeight: "bold", textDecorationLine: "line-through"}}>Q.{regularPrice}.00</Text>}
         </View>
-        {//<Text style={{fontSize: 17, color: "black", fontWeight: "bold"}}>Q.{item.item.prices.salesPrice.value}.00</Text>
-        }
+        <TouchableOpacity style={styles.detailsButton} onPress={() => onViewDetails?.(item)}>
+          <Text style={styles.detailsButtonText}>Ver detalles</Text>
+        </TouchableOpacity>
     </View>
   )
 }
@@ -26,6 +34,17 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         gap: 5
+    },
+    detailsButton: {
+      marginTop: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: "#E10812",
+    },
+    detailsButtonText: {
+      color: "#fff",
+      fontWeight: "700",
     }
 })
 
