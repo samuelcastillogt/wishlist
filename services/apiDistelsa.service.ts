@@ -20,6 +20,7 @@ class apiDistelsaService {
             headers: headers
         
         });
+        console.log(response.data.categories[0].children)
         return response.data;
     }
     public async getSearchProduct(producto: string){

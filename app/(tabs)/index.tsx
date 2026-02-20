@@ -3,21 +3,27 @@ import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
-import IconCategoryButon from '@/components/new/IconCategoryButon';
 import ProductCard from '@/components/new/ProductCard';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { apiDistelsa } from '@/services/apiDistelsa.service';
+import useStore from '@/store/index';
 //import { constants } from '@/constants/constants';
 export default function HomeScreen() {
   const [categories, setCategories] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [filterCategories, setFilterCategories] = useState<any[]>([]);
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [selectedFilterTitle, setSelectedFilterTitle] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const [isDetailModalVisible, setIsDetailModalVisible] = useState(false);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [selectedProductDetail, setSelectedProductDetail] = useState<any>(null);
-  const [cartCount, setCartCount] = useState(0);
+  const addToCart = useStore((state) => state.addToCart);
+  const cartCount = useStore((state) =>
+    state.cart.reduce((total, item) => total + item.quantity, 0),
+  );
 
   const getData = async () => {
     const data = await apiDistelsa.getData('catalogs/categories/summary?categoryDepth=5&categoryType=Base%2CPromoci%C3%B3n');
@@ -27,6 +33,7 @@ export default function HomeScreen() {
   const getProducts = async () => {
     const data = await apiDistelsa.getProductsByTarget();
     setProducts(data.products ?? []);
+    setFilterCategories(data?.categories?.[0]?.children ?? []);
   };
 
   const searchProduct = async (term: string) => {
@@ -109,6 +116,39 @@ export default function HomeScreen() {
     return null;
   };
 
+  const getFilterCategoryTitle = (item: any) =>
+    toDisplayText(item?.title ?? item?.name ?? item?.id, '');
+
+  const availableFilterCategories = filterCategories
+    .map(getFilterCategoryTitle)
+    .filter((title) => title.trim().length > 0)
+    .filter((title, index, arr) => arr.indexOf(title) === index);
+
+  const productMatchesCategory = (product: any, categoryTitle: string) => {
+    const needle = categoryTitle.toLowerCase().trim();
+    if (!needle) {
+      return true;
+    }
+
+    const categoryPayload =
+      product?.categories ??
+      product?.category ??
+      product?.breadcrumbs ??
+      product?.attributes?.categories ??
+      [];
+
+    const haystack = JSON.stringify(categoryPayload).toLowerCase();
+    if (haystack && haystack !== '[]') {
+      return haystack.includes(needle);
+    }
+
+    return JSON.stringify(product ?? {}).toLowerCase().includes(needle);
+  };
+
+  const visibleProducts = selectedFilterTitle
+    ? products.filter((item) => productMatchesCategory(item, selectedFilterTitle))
+    : products;
+
   const getSlugFromItem = (item: any): string | null => {
     const rawSlug =
       item?.slug ??
@@ -158,8 +198,31 @@ export default function HomeScreen() {
       return;
     }
 
-    setCartCount((prev) => prev + 1);
-    Alert.alert('Carrito', `${selectedProductDetail?.title ?? 'Producto'} agregado al carrito.`);
+    const id =
+      selectedProductDetail?.sku ??
+      selectedProductDetail?.slug ??
+      selectedProductDetail?.id ??
+      selectedProductDetail?.productId;
+    const priceValue =
+      selectedProductDetail?.prices?.salesPrice?.value ??
+      selectedProductDetail?.prices?.regularPrice?.value ??
+      0;
+
+    if (!id) {
+      Alert.alert('Carrito', 'No se pudo identificar el producto para agregar.');
+      return;
+    }
+
+    addToCart({
+      id: String(id),
+      sku: selectedProductDetail?.sku,
+      slug: selectedProductDetail?.slug,
+      title: toDisplayText(selectedProductDetail?.title, 'Producto'),
+      brand: getModalBrand(selectedProductDetail),
+      imageUrl: getModalImage(selectedProductDetail),
+      price: Number(priceValue) || 0,
+    });
+    Alert.alert('Carrito', `${toDisplayText(selectedProductDetail?.title, 'Producto')} agregado al carrito.`);
   };
 
   const getModalImage = (product: any) =>
@@ -179,16 +242,17 @@ export default function HomeScreen() {
   const modalTitle = toDisplayText(selectedProductDetail?.title, 'Producto');
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={{ uri: 'https://www.max.com.gt/assets/home_herobanner_sm_lenovo_e6fa77508f.webp' }}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <View style={styles.searchHeader}>
+    <View style={styles.screen}>
+      <ParallaxScrollView
+        headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
+        headerImage={
+          <Image
+            source={{ uri: 'https://www.max.com.gt/assets/home_herobanner_sm_lenovo_e6fa77508f.webp' }}
+            style={styles.reactLogo}
+          />
+        }
+      >
+        <View style={styles.searchHeader}>
         <View style={styles.searchRow}>
           <TextInput
             placeholder="Buscar..."
@@ -277,11 +341,18 @@ export default function HomeScreen() {
         </View>
       )}
 
-      <ScrollView horizontal style={{ gap: 10, padding: 10 }}>
+      {/* <ScrollView horizontal style={{ gap: 10, padding: 10 }}>
         {categories && categories.map((item: any) => <IconCategoryButon key={item.title} item={item} />)}
-      </ScrollView>
+      </ScrollView> */}
       <Text style={styles.productsTitle}>Productos que te pueden gustar</Text>
-      {products && products.map((item: any) => <ProductCard key={item.description} item={item} onViewDetails={openProductDetailModal} />)}
+      {selectedFilterTitle ? (
+        <Text style={styles.activeFilterText}>Filtro activo: {selectedFilterTitle}</Text>
+      ) : null}
+      {visibleProducts.length > 0 ? (
+        visibleProducts.map((item: any) => <ProductCard key={item.description} item={item} onViewDetails={openProductDetailModal} />)
+      ) : (
+        <Text style={styles.noProductsText}>No hay productos para la categoria seleccionada.</Text>
+      )}
 
       <Modal
         visible={isDetailModalVisible}
@@ -330,11 +401,67 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
-    </ParallaxScrollView>
+
+      </ParallaxScrollView>
+
+      <TouchableOpacity
+        style={styles.filterFab}
+        onPress={() => setIsFilterModalVisible(true)}
+        activeOpacity={0.85}
+      >
+        <MaterialIcons name="filter-list" size={22} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      <Modal
+        visible={isFilterModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsFilterModalVisible(false)}
+      >
+        <View style={styles.filterOverlay}>
+          <View style={styles.filterModalCard}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterTitle}>Filtrar por categoria</Text>
+              <TouchableOpacity onPress={() => setIsFilterModalVisible(false)}>
+                <MaterialIcons name="close" size={22} color="#111827" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.filterItem}
+              onPress={() => {
+                setSelectedFilterTitle(null);
+                setIsFilterModalVisible(false);
+              }}
+            >
+              <Text style={styles.filterItemText}>Todas las categorias</Text>
+            </TouchableOpacity>
+
+            <ScrollView style={styles.filterList}>
+              {availableFilterCategories.map((title) => (
+                <TouchableOpacity
+                  key={title}
+                  style={styles.filterItem}
+                  onPress={() => {
+                    setSelectedFilterTitle(title);
+                    setIsFilterModalVisible(false);
+                  }}
+                >
+                  <Text style={styles.filterItemText}>{title}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+  },
   reactLogo: {
     height: 250,
     width: 500,
@@ -466,6 +593,19 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 6,
   },
+  activeFilterText: {
+    fontSize: 14,
+    color: '#1D4ED8',
+    fontWeight: '600',
+    marginHorizontal: 10,
+    marginBottom: 6,
+  },
+  noProductsText: {
+    fontSize: 14,
+    color: '#6B7280',
+    marginHorizontal: 10,
+    marginTop: 8,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -536,5 +676,56 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#374151',
     fontSize: 14,
+  },
+  filterFab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 90,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#E10812',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  filterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  filterModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    maxHeight: '70%',
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  filterTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  filterList: {
+    marginTop: 6,
+  },
+  filterItem: {
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E5E7EB',
+  },
+  filterItemText: {
+    fontSize: 15,
+    color: '#111827',
   },
 });
